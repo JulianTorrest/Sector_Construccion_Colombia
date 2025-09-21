@@ -1,0 +1,5 @@
+# Git LFS tracking for large data files
+# Track all CSVs and, specifically, everything under Unificados/ y Unificados_final/
+*.csv filter=lfs diff=lfs merge=lfs -text
+Unificados/** filter=lfs diff=lfs merge=lfs -text
+Unificados_final/** filter=lfs diff=lfs merge=lfs -text

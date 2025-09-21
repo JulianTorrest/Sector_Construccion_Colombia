@@ -1,0 +1,34 @@
+& "C:\Users\betol\Downloads\GEIH 2024\.venv\Scripts\Activate.ps1"
+python --version
+pip install -r ".\requirements.txt"
+python geih.py --root "." --out-dir "Unificados" --final-merge --final-out "Unificados_final/final.csv"
+
+
+
+(.venv) PS C:\Users\betol\Downloads\GEIH 2024> python -m streamlit run app.py
+
+Si el archivo es muy grande, define “Máx. filas a cargar” (p. ej. 300000) y/o “Muestrear porcentaje de filas” (p. ej. 50%).
+Si necesitas aún menos memoria, marca “Cargar solo columnas seleccionadas” y elige solo las columnas que usarás para los KPIs/gráficos/ML.
+Sugerencias de configuración según tu RAM
+
+8 GB: 150k–300k filas, 30–60% muestreo, columnas seleccionadas.
+16 GB: 300k–800k filas, 50–100%, columnas seleccionadas si es necesario.
+32+ GB: puedes intentar todo el dataset, pero aún así PyArrow y categorías ayudan.
+
+Sugerencias de uso dentro del dashboard
+
+En “Analítica avanzada” > “Clustering”:
+Selecciona 5–15 variables numéricas.
+Activa “Estandarizar variables”.
+Elige K (empieza en 5), ejecuta y revisa el Silhouette. Ajusta K.
+Activa PCA para ver clusters en 2D. Descarga las etiquetas si te sirven.
+En “Analítica avanzada” > “Asociación (Reglas)”:
+Selecciona 3–8 columnas categóricas o discretizadas.
+Top categorías por columna controla dimensionalidad (10 suele ir bien).
+Ajusta soporte/confianza según rendimiento. Empieza con soporte 0.01 y confianza 0.5.
+Descarga reglas para analizarlas luego.
+Consejos de rendimiento:
+Si el CSV es muy grande, combina: “Máx. filas a cargar”, “Muestrear %”, y “Cargar solo columnas seleccionadas”.
+Para reglas de asociación, menos columnas y categorías más frecuentes rinden mejor.
+Para clustering, usa MiniBatchKMeans si ves lentitud y limita variables.
+
