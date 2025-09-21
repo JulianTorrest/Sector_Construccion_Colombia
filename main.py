@@ -57,6 +57,10 @@ def load_and_clean_data(url_tipos, url_vn):
 
         return df_merged
 
+    except Exception as e:
+        st.error(f"Error loading or cleaning data: {e}")
+        return None
+
 # --- 2. Entrenamiento del modelo de Machine Learning ---
 @st.cache_resource
 def train_model(df):
@@ -198,12 +202,10 @@ if df_final is not None and not df_final.empty:
         st.header("Predicción del Precio de tu Vivienda")
         st.write("Ingresa las características de la vivienda y el modelo predecirá el precio.")
         
-        # Obtener las listas de valores únicos para los selectboxes
         ciudades = sorted(df_final['Ciudad'].dropna().unique().tolist())
         zonas = sorted(df_final['Zona'].dropna().unique().tolist())
         estratos = sorted(df_final['Estrato'].dropna().unique().tolist())
         
-        # Widgets para la entrada de datos del usuario
         col1, col2, col3 = st.columns(3)
         with col1:
             area = st.number_input("Área (m²)", min_value=10, value=70, step=5)
@@ -220,11 +222,9 @@ if df_final is not None and not df_final.empty:
         
         if st.button("Predecir Precio"):
             try:
-                # Crear un DataFrame con los datos de entrada del usuario
                 data_input = pd.DataFrame([[area, alcobas, banos, parqueaderos, estrato, ciudad, zona]],
                                            columns=features)
                 
-                # Realizar la predicción
                 prediction = model.predict(data_input)[0]
                 
                 st.success(f"📈 El precio estimado de la vivienda es: **${prediction:,.0f} COP**")
