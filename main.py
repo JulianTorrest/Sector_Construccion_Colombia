@@ -50,9 +50,13 @@ def load_and_clean_data(url_tipos, url_vn):
             if col in df_merged.columns:
                 df_merged[col] = pd.to_numeric(df_merged[col], errors='coerce').fillna(0).astype('int64')
 
+        # Limpieza de la columna Estrato: Convertir a numérico y manejar no-valores
+        df_merged['Estrato'] = pd.to_numeric(df_merged['Estrato'], errors='coerce')
+        df_merged = df_merged[df_merged['Estrato'].isin([1, 2, 3, 4, 5, 6])].copy() # Solo mantener estratos válidos
+        df_merged['Estrato'] = df_merged['Estrato'].astype('int64')
+        
         df_merged.dropna(subset=['Precio', 'Área'], inplace=True)
         
-        # Filtrar para evitar valores extremos que distorsionan el modelo
         df_merged = df_merged[(df_merged['Precio'] > 10000000) & (df_merged['Área'] > 10)]
 
         return df_merged
@@ -73,7 +77,6 @@ def train_model(df):
     features = ['Área', 'Alcobas', 'Baños', 'Parqueaderos', 'Estrato', 'Ciudad', 'Zona']
     target = 'Precio'
     
-    # Asegurarse de que las columnas existen y no tienen nulos para el modelo
     df_model = df[features + [target]].dropna()
     
     X = df_model[features]
@@ -121,10 +124,8 @@ df_final = load_and_clean_data(url_1, url_2)
 
 if df_final is not None and not df_final.empty:
     
-    # Entrenar el modelo al inicio de la aplicación
     model, features = train_model(df_final)
     
-    # --- Interfaz del Dashboard ---
     tab1, tab2, tab3 = st.tabs(["📊 KPIs y Resumen", "📈 Gráficos Interactivos", "🧠 Predicción de Precios"])
 
     with tab1:
@@ -203,8 +204,6 @@ if df_final is not None and not df_final.empty:
         st.write("Ingresa las características de la vivienda y el modelo predecirá el precio.")
         
         ciudades = sorted(df_final['Ciudad'].dropna().unique().tolist())
-        zonas = sorted(df_final['Zona'].dropna().unique().tolist())
-        estratos = sorted(df_final['Estrato'].dropna().unique().tolist())
         
         col1, col2, col3 = st.columns(3)
         with col1:
@@ -215,8 +214,17 @@ if df_final is not None and not df_final.empty:
             parqueaderos = st.selectbox("Parqueaderos", [0, 1, 2, 3, 4, 5])
         with col3:
             ciudad = st.selectbox("Ciudad", ciudades)
-            zona = st.selectbox("Zona", zonas)
-            estrato = st.selectbox("Estrato", estratos)
+            
+            # Menú desplegable anidado para la Zona
+            if ciudad:
+                zonas_filtradas = sorted(df_final[df_final['Ciudad'] == ciudad]['Zona'].dropna().unique().tolist())
+                zona = st.selectbox("Zona", zonas_filtradas)
+            else:
+                zona = st.selectbox("Zona", [])
+            
+            # Menú desplegable para Estrato con valores válidos
+            estratos_validos = sorted(df_final['Estrato'].dropna().unique().tolist())
+            estrato = st.selectbox("Estrato", estratos_validos)
             
         st.write("---")
         
