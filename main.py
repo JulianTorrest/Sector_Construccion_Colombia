@@ -3,7 +3,6 @@ import pandas as pd
 import numpy as np
 import altair as alt
 from sklearn.model_selection import train_test_split
-from sklearn.linear_model import LinearRegression
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
@@ -87,7 +86,6 @@ def train_regression_model(df):
             ('cat', OneHotEncoder(handle_unknown='ignore'), categorical_features)
         ]
     )
-    # Cambiamos LinearRegression por RandomForestRegressor
     model_pipeline = Pipeline(steps=[('preprocessor', preprocessor),
                                      ('regressor', RandomForestRegressor(n_estimators=100, random_state=42))])
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
@@ -108,11 +106,11 @@ def run_clustering(df):
     """
     st.subheader("Agrupamiento (Clustering) con K-Means")
     st.write("Se están agrupando los proyectos de vivienda en **4 clusters** basados en sus características.")
-    features_for_clustering = ['Precio', 'Área', 'Alcobas', 'Baños']
-    clustering_df = df[features_for_clustering].dropna()
+    features_for_clustering = ['Precio', 'Área', 'Alcobas', 'Baños', 'Parqueaderos']
+    clustering_df = df[features_for_clustering + ['Ciudad', 'Zona']].dropna()
 
     scaler = StandardScaler()
-    scaled_features = scaler.fit_transform(clustering_df)
+    scaled_features = scaler.fit_transform(clustering_df[features_for_clustering])
 
     kmeans = KMeans(n_clusters=4, random_state=42, n_init=10)
     clusters = kmeans.fit_predict(scaled_features)
@@ -302,22 +300,17 @@ if df_final is not None and not df_final.empty:
         st.write("---")
         st.subheader("Análisis de Predicciones del Modelo")
         
-        # --- SOLUCIÓN AL ERROR ---
-        # Usamos una máscara booleana para filtrar los datos y mantener los índices sincronizados.
         city_mask = X_test['Ciudad'] == ciudad_prediccion
-        
         y_test_filtered = y_test[city_mask]
         y_pred_filtered = y_pred[city_mask]
         test_data_filtered = X_test[city_mask]
-
-        # Crear un DataFrame para el gráfico
+        
         chart_data = pd.DataFrame({
             'Zona': test_data_filtered['Zona'],
             'Precio Real': y_test_filtered,
             'Precio Pronosticado': y_pred_filtered
         }).melt(id_vars='Zona', var_name='Tipo de Precio', value_name='Precio')
 
-        # Gráfico Altair para comparar precios
         chart = alt.Chart(chart_data).mark_circle(size=60).encode(
             x=alt.X('Zona', title='Zona', axis=alt.Axis(labels=False)),
             y=alt.Y('Precio', title='Precio (COP)', axis=alt.Axis(format='~s')),
@@ -336,21 +329,72 @@ if df_final is not None and not df_final.empty:
         # --- Agrupamiento (Clustering) ---
         clustering_df, features_for_clustering = run_clustering(df_final)
         st.write("---")
-        st.write("### Gráfico de Clusters (Agrupamientos)")
-        st.write("Los proyectos de vivienda han sido agrupados en **4 clusters** basados en sus características. Los colores en el gráfico representan cada cluster.")
+        st.write("### Gráficos de Clusters (Agrupamientos)")
         
-        cluster_chart = alt.Chart(clustering_df).mark_circle().encode(
+        ciudades_clustering = ['Todas'] + sorted(clustering_df['Ciudad'].dropna().unique().tolist())
+        ciudad_cluster_filtro = st.selectbox("Filtrar por Ciudad", ciudades_clustering, key='ciudad_cluster_filtro')
+
+        if ciudad_cluster_filtro != 'Todas':
+            df_cluster_filtrado = clustering_df[clustering_df['Ciudad'] == ciudad_cluster_filtro]
+        else:
+            df_cluster_filtrado = clustering_df
+
+        # --- Gráfico 1: Área vs. Precio ---
+        st.write("#### 📈 Área vs. Precio")
+        st.write("Visualiza la relación entre el área y el precio, con puntos coloreados por cluster.")
+        cluster_chart_area_precio = alt.Chart(df_cluster_filtrado).mark_circle().encode(
             x=alt.X('Área', title='Área (m²)', axis=alt.Axis(format='~s')),
             y=alt.Y('Precio', title='Precio (COP)', axis=alt.Axis(format='~s')),
             color='Cluster:N',
             tooltip=['Cluster', 'Área', alt.Tooltip('Precio', format='$,.0f')]
         ).properties(
-            title='Proyectos Agrupados por Área y Precio'
+            title=f'Proyectos Agrupados por Área y Precio en {ciudad_cluster_filtro}'
         ).interactive()
-        
-        st.altair_chart(cluster_chart, use_container_width=True)
+        st.altair_chart(cluster_chart_area_precio, use_container_width=True)
 
-        # --- Reducción de Dimensión (PCA) ---
+        # --- Gráfico 2: Precio vs. Alcobas ---
+        st.write("---")
+        st.write("#### 🛌 Precio vs. Alcobas")
+        st.write("Examina la relación entre el precio y el número de alcobas. Podrías encontrar clústeres de proyectos de alto valor con muchas alcobas.")
+        cluster_chart_precio_alcobas = alt.Chart(df_cluster_filtrado).mark_circle().encode(
+            x=alt.X('Alcobas', title='Número de Alcobas', axis=alt.Axis(format='d')),
+            y=alt.Y('Precio', title='Precio (COP)', axis=alt.Axis(format='~s')),
+            color='Cluster:N',
+            tooltip=['Cluster', 'Alcobas', alt.Tooltip('Precio', format='$,.0f')]
+        ).properties(
+            title=f'Proyectos Agrupados por Precio y Alcobas en {ciudad_cluster_filtro}'
+        ).interactive()
+        st.altair_chart(cluster_chart_precio_alcobas, use_container_width=True)
+
+        # --- Gráfico 3: Área vs. Baños ---
+        st.write("---")
+        st.write("#### 🛀 Área vs. Baños")
+        st.write("Explora si los proyectos de mayor área tienden a tener más baños, una posible señal de lujo o confort.")
+        cluster_chart_area_banos = alt.Chart(df_cluster_filtrado).mark_circle().encode(
+            x=alt.X('Baños', title='Número de Baños', axis=alt.Axis(format='d')),
+            y=alt.Y('Área', title='Área (m²)', axis=alt.Axis(format='~s')),
+            color='Cluster:N',
+            tooltip=['Cluster', 'Baños', alt.Tooltip('Área', format='~s')]
+        ).properties(
+            title=f'Proyectos Agrupados por Área y Baños en {ciudad_cluster_filtro}'
+        ).interactive()
+        st.altair_chart(cluster_chart_area_banos, use_container_width=True)
+
+        # --- Gráfico 4: Alcobas vs. Parqueaderos ---
+        st.write("---")
+        st.write("#### 🅿️ Alcobas vs. Parqueaderos")
+        st.write("Analiza si hay una correlación entre el número de alcobas y la disponibilidad de parqueaderos.")
+        cluster_chart_alcobas_parqueaderos = alt.Chart(df_cluster_filtrado).mark_circle().encode(
+            x=alt.X('Alcobas', title='Número de Alcobas', axis=alt.Axis(format='d')),
+            y=alt.Y('Parqueaderos', title='Número de Parqueaderos', axis=alt.Axis(format='d')),
+            color='Cluster:N',
+            tooltip=['Cluster', 'Alcobas', 'Parqueaderos']
+        ).properties(
+            title=f'Proyectos Agrupados por Alcobas y Parqueaderos en {ciudad_cluster_filtro}'
+        ).interactive()
+        st.altair_chart(cluster_chart_alcobas_parqueaderos, use_container_width=True)
+
+        # --- Gráfico de Reducción de Dimensión (PCA) ---
         st.write("---")
         pca_results_df = run_pca_analysis(df_final)
         st.write("### Gráfico de Reducción de Dimensión (PCA)")
