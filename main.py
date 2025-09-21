@@ -60,6 +60,9 @@ def load_and_clean_data(url_tipos, url_vn):
         
         df_merged = df_merged[(df_merged['Precio'] > 10000000) & (df_merged['Área'] > 10)]
 
+        # Calcular el Precio por m²
+        df_merged['Precio por m²'] = df_merged['Precio'] / df_merged['Área']
+
         return df_merged
 
     except Exception as e:
@@ -161,7 +164,7 @@ if df_final is not None and not df_final.empty:
 
         total_proyectos = len(df_final)
         precio_promedio = df_final['Precio'].mean()
-        precio_por_metro_cuadrado = (df_final['Precio'] / df_final['Área']).mean()
+        precio_por_metro_cuadrado = df_final['Precio por m²'].mean()
         proyectos_sin_parqueadero = (df_final['Parqueaderos'] == 0).sum()
         mediana_area = df_final['Área'].median()
         proyectos_destacados = (df_final['Destacado'] == 'Sí').sum()
@@ -212,6 +215,32 @@ if df_final is not None and not df_final.empty:
             ).interactive()
             st.altair_chart(c_promedios, use_container_width=True)
             
+            st.write("---")
+            # Nuevo gráfico: Precio Promedio por m² y Ciudad
+            st.subheader("Gráfico de Barras: Precio Promedio por m² por Ciudad")
+            df_precio_m2_ciudad = df_filtrado.groupby('Ciudad')['Precio por m²'].mean().reset_index()
+            bar_precio_m2_ciudad = alt.Chart(df_precio_m2_ciudad).mark_bar().encode(
+                x=alt.X('Ciudad', sort='-y', axis=alt.Axis(title='Ciudad')),
+                y=alt.Y('Precio por m²', title='Precio Promedio (COP/m²)', axis=alt.Axis(format='~s'))
+            ).properties(
+                title='Precio Promedio por m² por Ciudad'
+            ).interactive()
+            st.altair_chart(bar_precio_m2_ciudad, use_container_width=True)
+
+            st.write("---")
+            # Nuevo gráfico: Precio Promedio por m² por Zona
+            if ciudad_filtro != 'Todas':
+                st.subheader(f"Gráfico de Barras: Precio Promedio por m² por Zona en {ciudad_filtro}")
+                df_precio_m2_zona = df_filtrado.groupby('Zona')['Precio por m²'].mean().reset_index()
+                bar_precio_m2_zona = alt.Chart(df_precio_m2_zona).mark_bar().encode(
+                    x=alt.X('Zona', sort='-y', axis=alt.Axis(title='Zona', labels=False)),
+                    y=alt.Y('Precio por m²', title='Precio Promedio (COP/m²)', axis=alt.Axis(format='~s')),
+                    tooltip=['Zona', alt.Tooltip('Precio por m²', format='~s')]
+                ).properties(
+                    title=f'Precio Promedio por m² por Zona en {ciudad_filtro}'
+                ).interactive()
+                st.altair_chart(bar_precio_m2_zona, use_container_width=True)
+
             st.write("---")
             st.subheader("Distribución de Precios")
             hist_precios = alt.Chart(df_filtrado).mark_bar().encode(
@@ -301,8 +330,8 @@ if df_final is not None and not df_final.empty:
         st.subheader("Análisis de Predicciones del Modelo")
         
         city_mask = X_test['Ciudad'] == ciudad_prediccion
-        y_test_filtered = y_test[city_mask]
-        y_pred_filtered = y_pred[city_mask]
+        y_test_filtered = y_test[city_mask.values]
+        y_pred_filtered = y_pred[city_mask.values]
         test_data_filtered = X_test[city_mask]
         
         chart_data = pd.DataFrame({
