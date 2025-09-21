@@ -50,9 +50,8 @@ def load_and_clean_data(url_tipos, url_vn):
             if col in df_merged.columns:
                 df_merged[col] = pd.to_numeric(df_merged[col], errors='coerce').fillna(0).astype('int64')
 
-        # Limpieza de la columna Estrato: Convertir a numérico y manejar no-valores
         df_merged['Estrato'] = pd.to_numeric(df_merged['Estrato'], errors='coerce')
-        df_merged = df_merged[df_merged['Estrato'].isin([1, 2, 3, 4, 5, 6])].copy() # Solo mantener estratos válidos
+        df_merged = df_merged[df_merged['Estrato'].isin([1, 2, 3, 4, 5, 6])].copy()
         df_merged['Estrato'] = df_merged['Estrato'].astype('int64')
         
         df_merged.dropna(subset=['Precio', 'Área'], inplace=True)
@@ -73,7 +72,6 @@ def train_model(df):
     """
     st.subheader("Entrenando el modelo de Machine Learning...")
     
-    # 1. Selección de Variables
     features = ['Área', 'Alcobas', 'Baños', 'Parqueaderos', 'Estrato', 'Ciudad', 'Zona']
     target = 'Precio'
     
@@ -82,7 +80,6 @@ def train_model(df):
     X = df_model[features]
     y = df_model[target]
 
-    # 2. Codificación para variables categóricas
     numeric_features = ['Área', 'Alcobas', 'Baños', 'Parqueaderos']
     categorical_features = ['Estrato', 'Ciudad', 'Zona']
     
@@ -93,17 +90,13 @@ def train_model(df):
         ]
     )
     
-    # 3. Creación del pipeline del modelo
     model_pipeline = Pipeline(steps=[('preprocessor', preprocessor),
                                      ('regressor', LinearRegression())])
     
-    # 4. División de los datos
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
     
-    # 5. Entrenamiento del modelo
     model_pipeline.fit(X_train, y_train)
     
-    # 6. Evaluación del modelo
     y_pred = model_pipeline.predict(X_test)
     r2 = r2_score(y_test, y_pred)
     mae = mean_absolute_error(y_test, y_pred)
@@ -113,7 +106,7 @@ def train_model(df):
     st.write(f"Mean Absolute Error (MAE): ${mae:,.0f} COP")
     st.write("---")
     
-    return model_pipeline, features
+    return model_pipeline, features, X_test, y_test, y_pred
 
 # --- Main App ---
 st.set_page_config(layout="wide")
@@ -124,19 +117,29 @@ df_final = load_and_clean_data(url_1, url_2)
 
 if df_final is not None and not df_final.empty:
     
-    model, features = train_model(df_final)
+    model, features, X_test, y_test, y_pred = train_model(df_final)
     
     tab1, tab2, tab3 = st.tabs(["📊 KPIs y Resumen", "📈 Gráficos Interactivos", "🧠 Predicción de Precios"])
 
     with tab1:
         st.header("Indicadores Clave (KPIs)")
+        
         kpi1, kpi2, kpi3 = st.columns(3)
+        kpi4, kpi5, kpi6 = st.columns(3)
+
         total_proyectos = len(df_final)
         precio_promedio = df_final['Precio'].mean()
         precio_por_metro_cuadrado = (df_final['Precio'] / df_final['Área']).mean()
+        proyectos_sin_parqueadero = (df_final['Parqueaderos'] == 0).sum()
+        mediana_area = df_final['Área'].median()
+        proyectos_destacados = (df_final['Destacado'] == 'Sí').sum()
+
         kpi1.metric("Proyectos Analizados", f"{total_proyectos:,}")
         kpi2.metric("Precio Promedio", f"${precio_promedio:,.0f} COP")
         kpi3.metric("Precio Promedio por m²", f"${precio_por_metro_cuadrado:,.0f} COP")
+        kpi4.metric("Mediana del Área", f"{mediana_area:,.0f} m²")
+        kpi5.metric("Proyectos Destacados", f"{proyectos_destacados:,}")
+        kpi6.metric("Proyectos sin Parqueadero", f"{proyectos_sin_parqueadero:,}")
         
         st.write("---")
         st.subheader("Distribución General")
@@ -198,6 +201,30 @@ if df_final is not None and not df_final.empty:
                 title='Distribución de Proyectos por Estrato'
             )
             st.altair_chart(bar_estratos, use_container_width=True)
+            
+            st.write("---")
+            st.subheader("Precio Promedio por Estrato")
+            df_precio_estrato = df_filtrado.groupby('Estrato')['Precio'].mean().reset_index()
+            df_precio_estrato.columns = ['Estrato', 'Precio Promedio']
+            bar_precio_estrato = alt.Chart(df_precio_estrato).mark_bar().encode(
+                x=alt.X('Estrato:N', sort='-y', axis=alt.Axis(title='Estrato')),
+                y=alt.Y('Precio Promedio', title='Precio Promedio (COP)', axis=alt.Axis(format='~s'))
+            ).properties(
+                title='Precio Promedio por Estrato'
+            ).interactive()
+            st.altair_chart(bar_precio_estrato, use_container_width=True)
+            
+            st.write("---")
+            st.subheader("Precio Promedio por Número de Alcobas")
+            df_precio_alcobas = df_filtrado.groupby('Alcobas')['Precio'].mean().reset_index()
+            df_precio_alcobas.columns = ['Alcobas', 'Precio Promedio']
+            bar_precio_alcobas = alt.Chart(df_precio_alcobas).mark_bar().encode(
+                x=alt.X('Alcobas:N', sort=None, axis=alt.Axis(title='Número de Alcobas')),
+                y=alt.Y('Precio Promedio', title='Precio Promedio (COP)', axis=alt.Axis(format='~s'))
+            ).properties(
+                title='Precio Promedio por Número de Alcobas'
+            ).interactive()
+            st.altair_chart(bar_precio_alcobas, use_container_width=True)
 
     with tab3:
         st.header("Predicción del Precio de tu Vivienda")
@@ -215,14 +242,12 @@ if df_final is not None and not df_final.empty:
         with col3:
             ciudad = st.selectbox("Ciudad", ciudades)
             
-            # Menú desplegable anidado para la Zona
             if ciudad:
                 zonas_filtradas = sorted(df_final[df_final['Ciudad'] == ciudad]['Zona'].dropna().unique().tolist())
                 zona = st.selectbox("Zona", zonas_filtradas)
             else:
                 zona = st.selectbox("Zona", [])
             
-            # Menú desplegable para Estrato con valores válidos
             estratos_validos = sorted(df_final['Estrato'].dropna().unique().tolist())
             estrato = st.selectbox("Estrato", estratos_validos)
             
@@ -239,6 +264,27 @@ if df_final is not None and not df_final.empty:
                 
             except Exception as e:
                 st.error(f"Ocurrió un error en la predicción: {e}")
+        
+        st.write("---")
+        st.subheader("Análisis de Predicciones del Modelo")
+        st.write("Observa cómo se comparan los precios predichos con los precios reales de una muestra de proyectos.")
+    
+        y_test_pred = pd.DataFrame({'Precio Real': y_test.values, 'Precio Predicho': y_pred})
+        y_test_pred.reset_index(inplace=True, drop=True)
+        
+        sample_data = y_test_pred.sample(n=10, random_state=42).melt(var_name='Tipo de Precio', value_name='Precio')
+        sample_data['Proyecto'] = [f"Proyecto {i+1}" for i in range(10)] * 2
+        
+        chart = alt.Chart(sample_data).mark_bar().encode(
+            x=alt.X('Proyecto', sort=None, axis=None),
+            y=alt.Y('Precio', title='Precio (COP)', axis=alt.Axis(format='~s')),
+            color='Tipo de Precio',
+            tooltip=['Proyecto', 'Tipo de Precio', alt.Tooltip('Precio', format='$,.0f')]
+        ).properties(
+            title='Comparación de Precios Reales vs. Predichos (Muestra)'
+        )
+        
+        st.altair_chart(chart, use_container_width=True)
 
 else:
     st.warning("No se pudieron cargar o limpiar los datos. Por favor, revisa las URLs o el formato de los archivos.")
