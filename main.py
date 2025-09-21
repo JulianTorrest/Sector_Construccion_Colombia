@@ -4,10 +4,12 @@ import numpy as np
 import altair as alt
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LinearRegression
-from sklearn.preprocessing import OneHotEncoder
+from sklearn.preprocessing import OneHotEncoder, StandardScaler
 from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
 from sklearn.metrics import r2_score, mean_absolute_error
+from sklearn.cluster import KMeans
+from sklearn.decomposition import PCA
 
 # URLs de los archivos
 url_1 = 'https://raw.githubusercontent.com/JulianTorrest/Sector_Construccion_Colombia/main/Proyectos%20de%20Vivienda%20Nuevos/ws_fr_vn_tipos_ver2_cs.xlsx'
@@ -54,7 +56,7 @@ def load_and_clean_data(url_tipos, url_vn):
         df_merged = df_merged[df_merged['Estrato'].isin([1, 2, 3, 4, 5, 6])].copy()
         df_merged['Estrato'] = df_merged['Estrato'].astype('int64')
         
-        df_merged.dropna(subset=['Precio', 'Área'], inplace=True)
+        df_merged.dropna(subset=['Precio', 'Área', 'Ciudad', 'Zona'], inplace=True)
         
         df_merged = df_merged[(df_merged['Precio'] > 10000000) & (df_merged['Área'] > 10)]
 
@@ -64,49 +66,79 @@ def load_and_clean_data(url_tipos, url_vn):
         st.error(f"Error loading or cleaning data: {e}")
         return None
 
-# --- 2. Entrenamiento del modelo de Machine Learning ---
+# --- Funciones para los Modelos de Machine Learning ---
 @st.cache_resource
-def train_model(df):
+def train_regression_model(df):
     """
-    Entrena un modelo de regresión lineal y devuelve el modelo y las variables.
+    Entrena un modelo de regresión lineal.
     """
     st.subheader("Entrenando el modelo de Machine Learning...")
-    
     features = ['Área', 'Alcobas', 'Baños', 'Parqueaderos', 'Estrato', 'Ciudad', 'Zona']
     target = 'Precio'
-    
     df_model = df[features + [target]].dropna()
-    
     X = df_model[features]
     y = df_model[target]
-
     numeric_features = ['Área', 'Alcobas', 'Baños', 'Parqueaderos']
     categorical_features = ['Estrato', 'Ciudad', 'Zona']
-    
     preprocessor = ColumnTransformer(
         transformers=[
             ('num', 'passthrough', numeric_features),
             ('cat', OneHotEncoder(handle_unknown='ignore'), categorical_features)
         ]
     )
-    
     model_pipeline = Pipeline(steps=[('preprocessor', preprocessor),
                                      ('regressor', LinearRegression())])
-    
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-    
     model_pipeline.fit(X_train, y_train)
-    
     y_pred = model_pipeline.predict(X_test)
     r2 = r2_score(y_test, y_pred)
     mae = mean_absolute_error(y_test, y_pred)
-    
     st.write(f"✅ **Modelo Entrenado Exitosamente**")
     st.write(f"R-squared (R²): {r2:.2f}")
     st.write(f"Mean Absolute Error (MAE): ${mae:,.0f} COP")
     st.write("---")
-    
     return model_pipeline, features, X_test, y_test, y_pred
+
+@st.cache_resource
+def run_clustering(df):
+    """
+    Ejecuta el modelo de clustering K-Means.
+    """
+    st.subheader("Agrupamiento (Clustering) con K-Means")
+    st.write("Se están agrupando los proyectos de vivienda en **4 clusters** basados en sus características.")
+    features_for_clustering = ['Precio', 'Área', 'Alcobas', 'Baños']
+    clustering_df = df[features_for_clustering].dropna()
+
+    scaler = StandardScaler()
+    scaled_features = scaler.fit_transform(clustering_df)
+
+    kmeans = KMeans(n_clusters=4, random_state=42, n_init=10)
+    clusters = kmeans.fit_predict(scaled_features)
+    clustering_df['Cluster'] = clusters
+    
+    return clustering_df, features_for_clustering
+
+@st.cache_resource
+def run_pca_analysis(df):
+    """
+    Ejecuta el Análisis de Componentes Principales (PCA).
+    """
+    st.subheader("Reducción de Dimensión con PCA")
+    st.write("Reduciendo la dimensionalidad del dataset para una mejor visualización de los datos.")
+    features_for_pca = ['Precio', 'Área', 'Alcobas', 'Baños', 'Parqueaderos']
+    pca_df = df[features_for_pca].dropna()
+    
+    scaler = StandardScaler()
+    scaled_features = scaler.fit_transform(pca_df)
+    
+    pca = PCA(n_components=2)
+    principal_components = pca.fit_transform(scaled_features)
+    
+    pca_results_df = pd.DataFrame(data=principal_components, columns=['Principal Component 1', 'Principal Component 2'])
+    
+    st.write(f"Varianza explicada por los 2 componentes: {pca.explained_variance_ratio_.sum():.2f}")
+    
+    return pca_results_df
 
 # --- Main App ---
 st.set_page_config(layout="wide")
@@ -117,9 +149,9 @@ df_final = load_and_clean_data(url_1, url_2)
 
 if df_final is not None and not df_final.empty:
     
-    model, features, X_test, y_test, y_pred = train_model(df_final)
+    model, features, X_test, y_test, y_pred = train_regression_model(df_final)
     
-    tab1, tab2, tab3 = st.tabs(["📊 KPIs y Resumen", "📈 Gráficos Interactivos", "🧠 Predicción de Precios"])
+    tab1, tab2, tab3, tab4 = st.tabs(["📊 KPIs y Resumen", "📈 Gráficos Interactivos", "🧠 Predicción de Precios", "🔬 Análisis Avanzado"])
 
     with tab1:
         st.header("Indicadores Clave (KPIs)")
@@ -267,24 +299,57 @@ if df_final is not None and not df_final.empty:
         
         st.write("---")
         st.subheader("Análisis de Predicciones del Modelo")
-        st.write("Observa cómo se comparan los precios predichos con los precios reales de una muestra de proyectos.")
+        st.write("Observa cómo se comparan los precios predichos con los precios reales en un gráfico de dispersión.")
     
         y_test_pred = pd.DataFrame({'Precio Real': y_test.values, 'Precio Predicho': y_pred})
         y_test_pred.reset_index(inplace=True, drop=True)
         
-        sample_data = y_test_pred.sample(n=10, random_state=42).melt(var_name='Tipo de Precio', value_name='Precio')
-        sample_data['Proyecto'] = [f"Proyecto {i+1}" for i in range(10)] * 2
-        
-        chart = alt.Chart(sample_data).mark_bar().encode(
-            x=alt.X('Proyecto', sort=None, axis=None),
-            y=alt.Y('Precio', title='Precio (COP)', axis=alt.Axis(format='~s')),
-            color='Tipo de Precio',
-            tooltip=['Proyecto', 'Tipo de Precio', alt.Tooltip('Precio', format='$,.0f')]
+        scatter_chart = alt.Chart(y_test_pred).mark_circle().encode(
+            x=alt.X('Precio Real', title='Precio Real (COP)', axis=alt.Axis(format='~s')),
+            y=alt.Y('Precio Predicho', title='Precio Predicho (COP)', axis=alt.Axis(format='~s')),
+            tooltip=[alt.Tooltip('Precio Real', format='$,.0f'), alt.Tooltip('Precio Predicho', format='$,.0f')]
         ).properties(
-            title='Comparación de Precios Reales vs. Predichos (Muestra)'
-        )
+            title='Dispersión de Precios Reales vs. Predichos'
+        ).interactive()
         
-        st.altair_chart(chart, use_container_width=True)
+        st.altair_chart(scatter_chart, use_container_width=True)
+
+    with tab4:
+        st.header("Análisis Avanzado de Machine Learning")
+        st.write("Esta sección presenta otros modelos de aprendizaje automático para una comprensión más profunda de los datos.")
+
+        # --- Agrupamiento (Clustering) ---
+        clustering_df, features_for_clustering = run_clustering(df_final)
+        st.write("---")
+        st.write("### Gráfico de Clusters (Agrupamientos)")
+        st.write("Los proyectos de vivienda han sido agrupados en **4 clusters** basados en sus características. Los colores en el gráfico representan cada cluster.")
+        
+        cluster_chart = alt.Chart(clustering_df).mark_circle().encode(
+            x=alt.X('Área', title='Área (m²)', axis=alt.Axis(format='~s')),
+            y=alt.Y('Precio', title='Precio (COP)', axis=alt.Axis(format='~s')),
+            color='Cluster:N',
+            tooltip=['Cluster', 'Área', alt.Tooltip('Precio', format='$,.0f')]
+        ).properties(
+            title='Proyectos Agrupados por Área y Precio'
+        ).interactive()
+        
+        st.altair_chart(cluster_chart, use_container_width=True)
+
+        # --- Reducción de Dimensión (PCA) ---
+        st.write("---")
+        pca_results_df = run_pca_analysis(df_final)
+        st.write("### Gráfico de Reducción de Dimensión (PCA)")
+        st.write("Este gráfico muestra los datos proyectados en 2 componentes principales. La cercanía entre los puntos indica similitud entre los proyectos.")
+        
+        pca_chart = alt.Chart(pca_results_df).mark_circle().encode(
+            x=alt.X('Principal Component 1', title='Componente Principal 1'),
+            y=alt.Y('Principal Component 2', title='Componente Principal 2'),
+            tooltip=['Principal Component 1', 'Principal Component 2']
+        ).properties(
+            title='Análisis de Componentes Principales (PCA)'
+        ).interactive()
+        
+        st.altair_chart(pca_chart, use_container_width=True)
 
 else:
     st.warning("No se pudieron cargar o limpiar los datos. Por favor, revisa las URLs o el formato de los archivos.")
