@@ -9,6 +9,7 @@ from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
 from sklearn.metrics import r2_score, mean_absolute_error
 from sklearn.cluster import KMeans
+from sklearn.ensemble import RandomForestRegressor
 from sklearn.decomposition import PCA
 
 # URLs de los archivos
@@ -70,7 +71,7 @@ def load_and_clean_data(url_tipos, url_vn):
 @st.cache_resource
 def train_regression_model(df):
     """
-    Entrena un modelo de regresión lineal.
+    Entrena un modelo de regresión de Bosque Aleatorio (Random Forest).
     """
     st.subheader("Entrenando el modelo de Machine Learning...")
     features = ['Área', 'Alcobas', 'Baños', 'Parqueaderos', 'Estrato', 'Ciudad', 'Zona']
@@ -86,8 +87,9 @@ def train_regression_model(df):
             ('cat', OneHotEncoder(handle_unknown='ignore'), categorical_features)
         ]
     )
+    # Cambiamos LinearRegression por RandomForestRegressor
     model_pipeline = Pipeline(steps=[('preprocessor', preprocessor),
-                                     ('regressor', LinearRegression())])
+                                     ('regressor', RandomForestRegressor(n_estimators=100, random_state=42))])
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
     model_pipeline.fit(X_train, y_train)
     y_pred = model_pipeline.predict(X_test)
@@ -272,22 +274,22 @@ if df_final is not None and not df_final.empty:
             banos = st.selectbox("Baños", [1, 2, 3, 4, 5])
             parqueaderos = st.selectbox("Parqueaderos", [0, 1, 2, 3, 4, 5])
         with col3:
-            ciudad = st.selectbox("Ciudad", ciudades)
+            ciudad_prediccion = st.selectbox("Ciudad", ciudades, key='ciudad_pred')
             
-            if ciudad:
-                zonas_filtradas = sorted(df_final[df_final['Ciudad'] == ciudad]['Zona'].dropna().unique().tolist())
-                zona = st.selectbox("Zona", zonas_filtradas)
+            if ciudad_prediccion:
+                zonas_filtradas = sorted(df_final[df_final['Ciudad'] == ciudad_prediccion]['Zona'].dropna().unique().tolist())
+                zona_prediccion = st.selectbox("Zona", zonas_filtradas, key='zona_pred')
             else:
-                zona = st.selectbox("Zona", [])
+                zona_prediccion = st.selectbox("Zona", [], key='zona_pred')
             
             estratos_validos = sorted(df_final['Estrato'].dropna().unique().tolist())
-            estrato = st.selectbox("Estrato", estratos_validos)
+            estrato_prediccion = st.selectbox("Estrato", estratos_validos, key='estrato_pred')
             
         st.write("---")
         
         if st.button("Predecir Precio"):
             try:
-                data_input = pd.DataFrame([[area, alcobas, banos, parqueaderos, estrato, ciudad, zona]],
+                data_input = pd.DataFrame([[area, alcobas, banos, parqueaderos, estrato_prediccion, ciudad_prediccion, zona_prediccion]],
                                            columns=features)
                 
                 prediction = model.predict(data_input)[0]
@@ -299,20 +301,30 @@ if df_final is not None and not df_final.empty:
         
         st.write("---")
         st.subheader("Análisis de Predicciones del Modelo")
-        st.write("Observa cómo se comparan los precios predichos con los precios reales en un gráfico de dispersión.")
-    
-        y_test_pred = pd.DataFrame({'Precio Real': y_test.values, 'Precio Predicho': y_pred})
-        y_test_pred.reset_index(inplace=True, drop=True)
         
-        scatter_chart = alt.Chart(y_test_pred).mark_circle().encode(
-            x=alt.X('Precio Real', title='Precio Real (COP)', axis=alt.Axis(format='~s')),
-            y=alt.Y('Precio Predicho', title='Precio Predicho (COP)', axis=alt.Axis(format='~s')),
-            tooltip=[alt.Tooltip('Precio Real', format='$,.0f'), alt.Tooltip('Precio Predicho', format='$,.0f')]
+        # Filtrar los datos de prueba y predicciones por la ciudad seleccionada
+        test_data_filtered = X_test[X_test['Ciudad'] == ciudad_prediccion]
+        y_test_filtered = y_test[test_data_filtered.index]
+        y_pred_filtered = y_pred[test_data_filtered.index]
+
+        # Crear un DataFrame para el gráfico
+        chart_data = pd.DataFrame({
+            'Zona': test_data_filtered['Zona'],
+            'Precio Real': y_test_filtered.values,
+            'Precio Pronosticado': y_pred_filtered
+        }).melt(id_vars='Zona', var_name='Tipo de Precio', value_name='Precio')
+
+        # Gráfico Altair para comparar precios
+        chart = alt.Chart(chart_data).mark_circle(size=60).encode(
+            x=alt.X('Zona', title='Zona', axis=alt.Axis(labels=False)),  # Ocultar etiquetas para evitar superposición
+            y=alt.Y('Precio', title='Precio (COP)', axis=alt.Axis(format='~s')),
+            color=alt.Color('Tipo de Precio', title='Tipo de Precio'),
+            tooltip=['Zona', alt.Tooltip('Precio', format='$,.0f')]
         ).properties(
-            title='Dispersión de Precios Reales vs. Predichos'
+            title=f'Comparación de Precios en {ciudad_prediccion}'
         ).interactive()
         
-        st.altair_chart(scatter_chart, use_container_width=True)
+        st.altair_chart(chart, use_container_width=True)
 
     with tab4:
         st.header("Análisis Avanzado de Machine Learning")
