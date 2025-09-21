@@ -233,7 +233,7 @@ if df_final is not None and not df_final.empty:
                 st.subheader(f"Gráfico de Barras: Precio Promedio por m² por Zona en {ciudad_filtro}")
                 df_precio_m2_zona = df_filtrado.groupby('Zona')['Precio por m²'].mean().reset_index()
                 bar_precio_m2_zona = alt.Chart(df_precio_m2_zona).mark_bar().encode(
-                    x=alt.X('Zona', sort='-y', axis=alt.Axis(title='Zona', labels=False)),
+                    x=alt.X('Zona', title='Zona', axis=alt.Axis(labelAngle=-45, title=None)),
                     y=alt.Y('Precio por m²', title='Precio Promedio (COP/m²)', axis=alt.Axis(format='~s')),
                     tooltip=['Zona', alt.Tooltip('Precio por m²', format='~s')]
                 ).properties(
@@ -341,7 +341,7 @@ if df_final is not None and not df_final.empty:
         }).melt(id_vars='Zona', var_name='Tipo de Precio', value_name='Precio')
 
         chart = alt.Chart(chart_data).mark_circle(size=60).encode(
-            x=alt.X('Zona', title='Zona', axis=alt.Axis(labels=False)),
+            x=alt.X('Zona', title='Zona', axis=alt.Axis(labelAngle=-45)),
             y=alt.Y('Precio', title='Precio (COP)', axis=alt.Axis(format='~s')),
             color=alt.Color('Tipo de Precio', title='Tipo de Precio'),
             tooltip=['Zona', alt.Tooltip('Precio', format='$,.0f')]
