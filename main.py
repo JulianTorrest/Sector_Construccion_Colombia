@@ -302,21 +302,24 @@ if df_final is not None and not df_final.empty:
         st.write("---")
         st.subheader("Análisis de Predicciones del Modelo")
         
-        # Filtrar los datos de prueba y predicciones por la ciudad seleccionada
-        test_data_filtered = X_test[X_test['Ciudad'] == ciudad_prediccion]
-        y_test_filtered = y_test[test_data_filtered.index]
-        y_pred_filtered = y_pred[test_data_filtered.index]
+        # --- SOLUCIÓN AL ERROR ---
+        # Usamos una máscara booleana para filtrar los datos y mantener los índices sincronizados.
+        city_mask = X_test['Ciudad'] == ciudad_prediccion
+        
+        y_test_filtered = y_test[city_mask]
+        y_pred_filtered = y_pred[city_mask]
+        test_data_filtered = X_test[city_mask]
 
         # Crear un DataFrame para el gráfico
         chart_data = pd.DataFrame({
             'Zona': test_data_filtered['Zona'],
-            'Precio Real': y_test_filtered.values,
+            'Precio Real': y_test_filtered,
             'Precio Pronosticado': y_pred_filtered
         }).melt(id_vars='Zona', var_name='Tipo de Precio', value_name='Precio')
 
         # Gráfico Altair para comparar precios
         chart = alt.Chart(chart_data).mark_circle(size=60).encode(
-            x=alt.X('Zona', title='Zona', axis=alt.Axis(labels=False)),  # Ocultar etiquetas para evitar superposición
+            x=alt.X('Zona', title='Zona', axis=alt.Axis(labels=False)),
             y=alt.Y('Precio', title='Precio (COP)', axis=alt.Axis(format='~s')),
             color=alt.Color('Tipo de Precio', title='Tipo de Precio'),
             tooltip=['Zona', alt.Tooltip('Precio', format='$,.0f')]
